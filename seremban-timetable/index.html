@@ -447,13 +447,13 @@ async function saveRevision(){
     let assetId=null;
     if(S.assets){try{const up=await S.assets.upload(A.file);assetId=up.id;}catch(e){}}
     const n=S.revs.reduce((m,x)=>Math.max(m,x.n||0),0)+1;
-    const uid=S.user&&S.user.id?await S.user.id():null;
+    const uid=S.user&&S.user.id?await S.user.id():(S.localMode?'local':null);
     const id='r'+n+'-'+Date.now().toString(36);
     await S.db.doc('revisions/'+id).set({n,title:r.title,label:label||('Revision '+n),service:svc,effective:eff,fileName:A.file.name,assetId,uploadedAt:new Date().toISOString(),uploadedBy:uid,stations:r.stations,tables:r.tables,trainCount:r.trainCount,warnings:r.warnings});
     if(makeLive){const live={...S.live,[svc]:id,updatedAt:new Date().toISOString()};await S.db.doc('config/live').set(live);}
     const prev=S.revs.filter(x=>x.service===svc).sort((a,b)=>b.n-a.n)[0];
     A.parsed=null;A.file=null;
-    A.msg={kind:'ok',text:'Saved as revision '+n+(makeLive?' and made live.':'.')+(assetId?'':' The PDF itself couldn\'t be stored, but the times were saved.')};
+    A.msg={kind:'ok',text:'Saved as revision '+n+(makeLive?' and made live.':'.')+(assetId||S.localMode?'':' The PDF itself couldn\'t be stored, but the times were saved.')+(S.localMode?' Saved in this browser only. Export timetable.json to publish it.':'')};
     if(prev){A.cmpOld=prev._id;A.cmpNew=id;}
   }catch(e){A.msg={kind:'err',text:'Save failed: '+(e.code==='quota_exceeded'?'storage is full, delete an old revision first.':(e.message||e.code||e))};}
   A.busy=false;renderAdmin();
@@ -549,6 +549,11 @@ function renderAdmin(){
       '<button class="btn sm" data-cmp="'+r._id+'" type="button">Compare</button>'+del+'</div></div></div>';
   }).join(''):'<p class="muted">'+(S.loaded?'No revisions yet. Upload the first timetable above.':'Loading revisions…')+'</p>';
   app.innerHTML='<div class="wrap wide"><div class="topbar"><div><div class="eyebrow" style="opacity:1;color:var(--muted)">Seremban Line timetable</div><h1>Timetable admin</h1></div><a class="btn" href="#">View timetable</a></div>'+
+    (S.localMode?'<section class="card"><h2>Publishing from this copy</h2><p class="muted" style="margin:0">This copy of the page has no shared database. Uploads and changes here are saved <strong>in this browser only</strong>. To publish them, export <code>timetable.json</code> and commit it to the repo as <code>seremban-timetable/data/timetable.json</code>.</p>'+
+      (LOCAL.dirty?'<div class="msg warnlist">You have changes that are not in the published timetable yet.</div>':'')+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn accent" id="l-export" type="button">Export timetable.json</button>'+
+      (LOCAL.dirty?(A.confirmReset?'<span class="confirm">Discard local changes? <button class="btn sm danger" id="l-reset-yes" type="button">Discard</button><button class="btn sm" id="l-reset-no" type="button">Keep</button></span>':'<button class="btn danger" id="l-reset" type="button">Discard local changes</button>'):'')+
+      '</div></section>':'')+
     (A.msg?'<div class="msg '+(A.msg.kind==='err'?'err':A.msg.kind==='ok'?'ok':'warnlist')+'" role="status">'+esc(A.msg.text)+'</div>':'')+
     '<section class="card"><h2>Upload a new schedule</h2>'+up+'</section>'+
     '<section class="card"><h2>Revision log</h2><div class="log">'+log+'</div></section>'+
@@ -560,6 +565,10 @@ function renderAdmin(){
     dz.ondrop=e=>{e.preventDefault();dz.classList.remove('over');handleFile(e.dataTransfer.files[0]);};}
   if($('f-save')) $('f-save').onclick=saveRevision;
   if($('f-cancel')) $('f-cancel').onclick=()=>{A.parsed=null;A.file=null;A.msg=null;renderAdmin();};
+  if($('l-export')) $('l-export').onclick=exportLocal;
+  if($('l-reset')) $('l-reset').onclick=()=>{A.confirmReset=true;renderAdmin();};
+  if($('l-reset-yes')) $('l-reset-yes').onclick=resetLocal;
+  if($('l-reset-no')) $('l-reset-no').onclick=()=>{A.confirmReset=false;renderAdmin();};
   app.querySelectorAll('[data-live]').forEach(b=>b.onclick=()=>setLive(b.dataset.live));
   app.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{A.confirmDel=b.dataset.del;renderAdmin();});
   app.querySelectorAll('[data-del-yes]').forEach(b=>b.onclick=()=>delRev(b.dataset.delYes));
@@ -573,6 +582,36 @@ async function resolveNames(){
   try{const ps=await S.user.profiles(ids);ids.forEach(id=>{S.names[id]=(ps[id]&&ps[id].name)||'Someone';});if(view()==='admin')renderAdmin();}catch(e){}
 }
 
+/* ---------------- Standalone (local) storage ---------------- */
+const LOCAL_KEY='ktmb-seremban-local-db';let LOCAL=null;
+function localSave(){LOCAL.dirty=true;try{localStorage.setItem(LOCAL_KEY,JSON.stringify(LOCAL));}catch(e){}}
+function localEmit(){
+  S.revs=Object.entries(LOCAL.revisions).map(([id,d])=>({...d,_id:id}));S.revMap={};S.revs.forEach(r=>S.revMap[r._id]=r);
+  S.live={...LOCAL.live};
+}
+function localDb(){
+  return {doc(path){const[c,id]=path.split('/');return{
+    set:async v=>{if(c==='config')LOCAL.live={...v};else LOCAL.revisions[id]=JSON.parse(JSON.stringify(v));localSave();localEmit();},
+    delete:async()=>{if(c==='revisions')delete LOCAL.revisions[id];localSave();localEmit();}};}};
+}
+function exportLocal(){
+  const now=new Date().toISOString();
+  const out={exportedAt:now,live:Object.fromEntries(Object.entries(LOCAL.live).filter(([k])=>k!=='updatedAt')),
+    revisions:Object.entries(LOCAL.revisions).map(([id,d])=>({_id:id,...d})).sort((a,b)=>a.n-b.n)};
+  const blob=new Blob([JSON.stringify(out,null,1)+'\n'],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='timetable.json';document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+  // once this file is committed, the published snapshot will match these local edits
+  LOCAL.base=now;LOCAL.dirty=false;try{localStorage.setItem(LOCAL_KEY,JSON.stringify(LOCAL));}catch(e){}
+  S.admin.msg={kind:'ok',text:'Downloaded timetable.json. Replace seremban-timetable/data/timetable.json in the repo with it and commit, and everyone will see the update.'};renderAdmin();
+}
+function resetLocal(){
+  try{localStorage.removeItem(LOCAL_KEY);}catch(e){}
+  const snap=S.snapshot;
+  LOCAL={base:snap.exportedAt,dirty:false,live:{...(snap.live||{})},revisions:Object.fromEntries((snap.revisions||[]).map(r=>{const{_id,...d}=r;return[_id,d];}))};
+  localEmit();S.admin.msg={kind:'ok',text:'Local changes discarded. Showing the published timetable again.'};S.admin.confirmReset=false;renderAdmin();
+}
+
 /* ---------------- Boot ---------------- */
 window.addEventListener('hashchange',()=>{S.admin.msg=null;render();window.scrollTo(0,0);});
 render();
@@ -581,12 +620,16 @@ setInterval(tick,1000);
 (async()=>{
   const c=window.claude;
   if(!c||!c.use){
-    // Standalone (e.g. GitHub Pages): load the exported snapshot instead of the claude.ai database.
-    try{
-      const j=await (await fetch('data/timetable.json',{cache:'no-cache'})).json();
-      S.revs=j.revisions||[];S.revMap={};S.revs.forEach(r=>S.revMap[r._id]=r);S.live=j.live||{};
-    }catch(e){S.dbMissing=true;}
-    S.loaded=true;render();return;
+    // Standalone (e.g. GitHub Pages): load the exported snapshot, and keep admin edits in this browser
+    // until they are exported as timetable.json and committed to the repo.
+    let snap;
+    try{snap=await (await fetch('data/timetable.json',{cache:'no-cache'})).json();}
+    catch(e){S.dbMissing=true;S.loaded=true;render();return;}
+    S.localMode=true;S.canEdit=true;S.names.local='you (this browser)';S.snapshot=snap;
+    let stored=null;try{stored=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null');}catch(e){}
+    if(stored&&stored.base!==snap.exportedAt) stored=null; // repo has a newer snapshot: drop stale local edits
+    LOCAL=stored||{base:snap.exportedAt,dirty:false,live:{...(snap.live||{})},revisions:Object.fromEntries((snap.revisions||[]).map(r=>{const{_id,...d}=r;return[_id,d];}))};
+    S.db=localDb();localEmit();S.loaded=true;render();return;
   }
   const [db,user,assets]=await Promise.all([c.use('db'),c.use('user'),c.use('assets')]);
   S.db=db;S.user=user;S.assets=assets;
