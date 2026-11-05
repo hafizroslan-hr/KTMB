@@ -1,0 +1,612 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Seremban Line Timetable</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column — a station-board header, a from/to picker, then a departure list like a platform board. Admin view widens to a working column with upload, log and compare. */
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --ink:#14232c; --muted:#5b6b75; --line:#d5dde2;
+  --board:#13303d; --board-ink:#f2f6f8; --accent:#e8a317; --accent-ink:#2b1d00; --past:#9aa7af;
+  --good:#1f7a4d; --bad:#b3372b; --good-bg:#e3f3ea; --bad-bg:#f9e5e2;
+  --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c161b; --surface:#13222a; --ink:#e4ecf0; --muted:#8fa1ab; --line:#24363f;
+  --board:#0a2733; --board-ink:#e9f1f4; --accent:#f0b43a; --accent-ink:#2b1d00; --past:#56666f;
+  --good:#5fd39a; --bad:#ff8a7d; --good-bg:#12321f; --bad-bg:#3a1a16; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c161b; --surface:#13222a; --ink:#e4ecf0; --muted:#8fa1ab; --line:#24363f;
+  --board:#0a2733; --board-ink:#e9f1f4; --accent:#f0b43a; --accent-ink:#2b1d00; --past:#56666f;
+  --good:#5fd39a; --bad:#ff8a7d; --good-bg:#12321f; --bad-bg:#3a1a16; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:560px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px;display:flex;flex-direction:column;gap:16px}
+.wrap.wide{max-width:760px}
+.board{background:var(--board);color:var(--board-ink);border-radius:14px;padding:18px 18px 16px;display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.75}
+h1{font-family:var(--f-display);font-weight:700;font-size:26px;line-height:1.1;margin:2px 0 0;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:700;font-size:20px;margin:0;text-wrap:balance}
+.pick{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.fields{display:flex;flex-direction:column;gap:8px;min-width:0}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field>label,.lbl{font-family:var(--f-display);font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+.board select{appearance:none;-webkit-appearance:none;width:100%;font:600 18px/1.2 var(--f-display);color:var(--board-ink);background-color:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 36px 10px 12px;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 18px) 55%,calc(100% - 13px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+.board select option{color:#14232c;background:#fff}
+select:focus-visible,button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.swap{width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:transparent;color:var(--board-ink);font-size:20px;cursor:pointer;margin-top:18px}
+.swap:hover{background:rgba(255,255,255,.1)}
+.svc{display:flex;gap:6px;flex-wrap:wrap}
+.svc button{font:600 13px var(--f-display);letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:5px 12px;border:1px solid rgba(255,255,255,.25);background:transparent;color:var(--board-ink);cursor:pointer}
+.svc button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.next{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;border-top:1px dashed rgba(255,255,255,.2);padding-top:12px;flex-wrap:wrap;min-height:52px}
+.next .big{font-family:var(--f-display);font-weight:700;font-size:40px;line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
+.next .sub{font-size:14px;opacity:.85}
+.warn{background:color-mix(in srgb,var(--accent) 18%,var(--surface));color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px}
+.toggle{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.toggle input{accent-color:var(--accent);width:18px;height:18px}
+.list,.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.card{padding:16px;display:flex;flex-direction:column;gap:12px;overflow:visible}
+.head,.row{display:grid;grid-template-columns:4.2em 1fr 4.2em 3.6em;gap:8px;align-items:center;padding:10px 14px}
+.head{font-family:var(--f-display);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line)}
+.row{border-bottom:1px solid var(--line);cursor:pointer;width:100%;background:none;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit;text-align:left}
+.item:last-child .row{border-bottom:0}
+.row:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.t{font-family:var(--f-display);font-weight:700;font-size:20px;font-variant-numeric:tabular-nums}
+.mid{display:flex;flex-direction:column;min-width:0}
+.mid .dur{font-size:13px;color:var(--muted)}
+.mid .train{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{height:2px;background:var(--line);position:relative;margin:4px 0}
+.bar::before,.bar::after{content:"";position:absolute;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--ink)}
+.bar::before{left:0}.bar::after{right:0;background:var(--surface);border:2px solid var(--ink);top:-4px}
+.arr{text-align:right}
+.wait{font-size:12px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.item.past .row{color:var(--past)}
+.item.past .bar::before{background:var(--past)}.item.past .bar::after{border-color:var(--past)}
+.item.is-next .row{background:color-mix(in srgb,var(--accent) 16%,var(--surface))}
+.pill{display:inline-block;font-family:var(--f-display);font-weight:600;font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:2px}
+.pill.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.stops{padding:4px 14px 12px 14px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--line) 35%,var(--surface))}
+.stops ol{list-style:none;margin:0;padding:0}
+.stops li{display:grid;grid-template-columns:4em 1fr;gap:8px;padding:3px 0;font-size:14px;font-variant-numeric:tabular-nums}
+.stops li.end{font-weight:600}
+.stops li.off{color:var(--muted)}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+footer{font-size:12px;color:var(--muted);text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center}
+a{color:inherit}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}
+/* admin */
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.btn{font:600 14px var(--f-body);border-radius:10px;padding:9px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--board);color:var(--board-ink);border-color:var(--board)}
+.btn.accent{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.sm{padding:5px 10px;font-size:13px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:22px 16px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:8px;align-items:center;cursor:pointer}
+.drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.drop strong{color:var(--ink)}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.formgrid .field>label{opacity:1;color:var(--muted)}
+.card input[type=text],.card input[type=date],.card select{font:500 15px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+.stats{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:600 13px var(--f-display);letter-spacing:.04em;border-radius:999px;padding:3px 10px;background:color-mix(in srgb,var(--line) 60%,var(--surface));font-variant-numeric:tabular-nums}
+.chip.add{background:var(--good-bg);color:var(--good)}
+.chip.del{background:var(--bad-bg);color:var(--bad)}
+.chip.mod{background:color-mix(in srgb,var(--accent) 22%,var(--surface));color:var(--ink)}
+.msg{font-size:14px;border-radius:8px;padding:8px 12px}
+.msg.err{background:var(--bad-bg);color:var(--bad)}
+.msg.ok{background:var(--good-bg);color:var(--good)}
+.msg.warnlist{background:color-mix(in srgb,var(--accent) 14%,var(--surface))}
+.msg ul{margin:4px 0 0;padding-left:18px}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table.mini{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.mini th,table.mini td{padding:3px 7px;border-bottom:1px solid var(--line);text-align:center}
+table.mini th:first-child,table.mini td:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}
+table.mini thead th{font-family:var(--f-display);color:var(--muted)}
+.log{display:flex;flex-direction:column}
+.rev{display:grid;grid-template-columns:3.2em 1fr;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.rev:first-child{border-top:0}
+.revno{font:700 22px var(--f-display);color:var(--muted);font-variant-numeric:tabular-nums}
+.rev.live .revno{color:var(--accent)}
+.revbody{display:flex;flex-direction:column;gap:4px;min-width:0}
+.revtitle{font-weight:600}
+.revmeta{font-size:13px;color:var(--muted)}
+.revact{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.cmpgrid{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
+.cmpgrid .arrow{padding-bottom:9px;color:var(--muted)}
+.dir{font:600 13px var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+.chg{border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:4px}
+.chg h3{margin:0;font:700 16px var(--f-display);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chg ul{list-style:none;margin:0;padding:0;font-size:14px;font-variant-numeric:tabular-nums}
+.chg li{display:grid;grid-template-columns:minmax(7em,11em) 1fr;gap:8px;padding:1px 0}
+.old{color:var(--bad);text-decoration:line-through}
+.new{color:var(--good);font-weight:600}
+.delta{color:var(--muted);font-size:12px}
+.muted{color:var(--muted)}
+.divider{padding:8px 14px;font:600 12px var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:color-mix(in srgb,var(--line) 40%,var(--surface));border-bottom:1px solid var(--line)}
+.fold{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.fold-h{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;width:100%;padding:12px 14px;background:none;border:0;color:var(--ink);font:inherit;text-align:left;cursor:pointer;border-radius:14px}
+.fold-ic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--board);color:var(--board-ink)}
+.fold-t{display:flex;flex-direction:column;min-width:0}
+.fold-t strong{font:700 16px var(--f-display)}
+.fold-t span{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chev{color:var(--muted)}
+.fold.open .chev{transform:rotate(180deg)}
+@media (prefers-reduced-motion:no-preference){.chev{transition:transform .2s}}
+.fold-b{padding:0 12px 12px;display:flex;flex-direction:column;gap:12px}
+/* live tracker */
+.tracker{background:var(--good-bg);border:2px solid var(--good);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px;color:var(--ink)}
+.tk-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.live{display:inline-flex;align-items:center;gap:6px;font:700 12px var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--good)}
+.live i{width:9px;height:9px;border-radius:50%;background:var(--good);display:inline-block}
+@media (prefers-reduced-motion:no-preference){.live i{animation:pulse 1.6s ease-out infinite}@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 60%,transparent)}100%{box-shadow:0 0 0 9px transparent}}}
+.tk-train{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tk-status{display:flex;flex-direction:column;gap:2px}
+.tk-status .lbl{opacity:1;color:var(--good);font-weight:600}
+.tk-now{font:700 28px/1.1 var(--f-display);text-wrap:balance}
+.tk-count{font:700 22px var(--f-display);color:var(--good);font-variant-numeric:tabular-nums}
+.tk-count small{font:500 14px var(--f-body);color:var(--muted)}
+.leg{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center}
+.leg .end{display:flex;flex-direction:column;min-width:0}
+.leg .end.r{text-align:right}
+.leg .end span:first-child{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-family:var(--f-display)}
+.leg .end strong{font:700 17px var(--f-display);overflow-wrap:anywhere}
+.leg .end em{font-style:normal;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.track{position:relative;height:6px;width:clamp(70px,22vw,160px);background:color-mix(in srgb,var(--good) 25%,var(--surface));border-radius:3px}
+.track b{position:absolute;left:0;top:0;bottom:0;background:var(--good);border-radius:3px}
+.track .train{position:absolute;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:var(--surface);border:3px solid var(--good)}
+.trip{display:flex;flex-direction:column;gap:6px}
+.trip .tbar{height:4px;background:color-mix(in srgb,var(--good) 20%,var(--surface));border-radius:2px;overflow:hidden}
+.trip .tbar b{display:block;height:100%;background:var(--good)}
+.trip .facts{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tk-alt{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
+.item.onboard .row{background:var(--good-bg);box-shadow:inset 4px 0 0 var(--good)}
+.item.onboard .t,.item.onboard .dur{color:var(--good)}
+.pill.green{background:var(--good);color:var(--surface)}
+
+@media (prefers-reduced-motion:no-preference){.row,.btn{transition:background .15s,border-color .15s}}
+</style>
+
+<div id="app"></div>
+
+<script>
+
+const MONTHS={JANUARI:1,JANUARY:1,FEBRUARI:2,FEBRUARY:2,MAC:3,MARCH:3,APRIL:4,MEI:5,MAY:5,JUN:6,JUNE:6,JULAI:7,JULY:7,OGOS:8,AUGUST:8,SEPTEMBER:9,OKTOBER:10,OCTOBER:10,NOVEMBER:11,DISEMBER:12,DECEMBER:12};
+async function parseTimetablePdf(pdf){
+  const tokens=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    for(const it of tc.items){
+      const s=it.str||''; if(!s.trim()) continue;
+      const x0=it.transform[4], y=it.transform[5], w=it.width||0, L=s.length||1;
+      const re=/\S+/g; let m;
+      while((m=re.exec(s))){ const a=x0+w*m.index/L, b=x0+w*(m.index+m[0].length)/L; tokens.push({t:m[0],x:(a+b)/2,y,p}); }
+    }
+  }
+  // group into lines (page order, then top-down)
+  tokens.sort((a,b)=>a.p-b.p||b.y-a.y||a.x-b.x);
+  const lines=[];
+  for(const tk of tokens){
+    let ln=lines.find(l=>l.p===tk.p&&Math.abs(l.y-tk.y)<3);
+    if(!ln){ln={p:tk.p,y:tk.y,toks:[]};lines.push(ln);}
+    ln.toks.push(tk);
+  }
+  lines.sort((a,b)=>a.p-b.p||b.y-a.y);
+  lines.forEach(l=>l.toks.sort((a,b)=>a.x-b.x));
+  const isTime=t=>/^\d{1,2}[:.]\d{2}$/.test(t), isCode=t=>/^\d{5}$/.test(t);
+  const titles=[]; const tables=[]; let cur=null; const warnings=[];
+  for(const l of lines){
+    const words=l.toks.map(k=>k.t), up=words.join(' ').toUpperCase();
+    if(/JADUAL|KOMUTER/.test(up)) titles.push(words.join(' '));
+    const trainToks=l.toks.filter(k=>/^\d{3,5}$/.test(k.t));
+    if(/\bTREN\b|\bTRAIN\b/.test(up) && trainToks.length>=2){
+      const cols=trainToks.map(k=>({x:k.x,no:k.t}));
+      const gaps=cols.slice(1).map((c,i)=>c.x-cols[i].x).sort((a,b)=>a-b);
+      cur={cols,tol:(gaps[Math.floor(gaps.length/2)]||40)*0.45,rows:[]}; tables.push(cur); continue;
+    }
+    if(!cur) continue;
+    const times=l.toks.filter(k=>isTime(k.t));
+    if(!times.length) continue;
+    const name=l.toks.filter(k=>!isTime(k.t)&&!isCode(k.t)).map(k=>k.t).join(' ').trim();
+    if(!name){warnings.push('A row of times had no station name and was skipped.');continue;}
+    const row={};
+    for(const k of times){
+      let best=null,bd=1e9; cur.cols.forEach((c,i)=>{const d=Math.abs(c.x-k.x); if(d<bd){bd=d;best=i;}});
+      if(bd>cur.tol){warnings.push(name+': time '+k.t+' did not line up with any train column.');continue;}
+      if(row[best]) warnings.push(name+': two times under train '+cur.cols[best].no+'.');
+      row[best]=k.t.replace('.',':');
+    }
+    cur.rows.push({name:name.toUpperCase().replace(/\s+/g,' '),row});
+  }
+  const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
+  const out=tables.filter(t=>t.rows.length).map((t,ti)=>{
+    const stations=t.rows.map(r=>r.name);
+    const trains=t.cols.map((c,i)=>({no:c.no,times:t.rows.map(r=>r.row[i]||'')})).filter(tr=>tr.times.filter(Boolean).length>=2);
+    trains.forEach(tr=>{let prev=-1;tr.times.forEach((x,i)=>{if(!x)return;const m=toMin(x);if(m<prev)warnings.push('Train '+tr.no+' goes back in time at '+stations[i]+' ('+x+'). Check the PDF.');prev=m;});});
+    return {name:stations[0]+' → '+stations[stations.length-1],stations,trains};
+  });
+  const title=titles.join(' ');
+  let effective='';
+  const dm=title.toUpperCase().match(/(\d{1,2})\s+([A-Z]+)\s+(\d{4})/);
+  if(dm&&MONTHS[dm[2]]) effective=dm[3]+'-'+String(MONTHS[dm[2]]).padStart(2,'0')+'-'+dm[1].padStart(2,'0');
+  const U=title.toUpperCase();
+  const service=/HUJUNG MINGGU|WEEKEND|CUTI|SABTU|AHAD/.test(U)?'weekend':'weekday';
+  // station order: longest table first, then merge others
+  const order=[];
+  [...out].sort((a,b)=>b.stations.length-a.stations.length).forEach(t=>t.stations.forEach(s=>{if(!order.includes(s))order.push(s);}));
+  const first=out[0]; if(first){const fo=first.stations; order.sort((a,b)=>{const ia=fo.indexOf(a),ib=fo.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib);});}
+  return {title:titles[0]||'',service,effective,stations:order,tables:out,warnings:[...new Set(warnings)].slice(0,30),trainCount:out.reduce((n,t)=>n+t.trains.length,0)};
+}
+
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nice=n=>({"KL SENTRAL":"KL Sentral","UKM":"UKM","MIDVALLEY":"Mid Valley"}[n]||String(n).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()));
+const toMin=t=>{if(!t)return null;const[h,m]=t.split(':').map(Number);return h*60+m;};
+const fmtDur=m=>m<60?m+' min':Math.floor(m/60)+' h'+(m%60?' '+(m%60)+' min':'');
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtDate=d=>{if(!d)return '—';const[y,m,dd]=d.split('-');return +dd+' '+MON[+m-1]+' '+y;};
+const fmtStamp=iso=>{try{return new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}catch(e){return iso||'';}};
+const SVC={weekday:'Weekdays',weekend:'Weekends & holidays'};
+
+const S={db:null,user:null,assets:null,canEdit:false,revs:[],revMap:{},live:{},loaded:false,slow:false,dbMissing:false,
+  rider:{svc:null,openNo:null,folds:{},foldKey:''},names:{},
+  admin:{parsed:null,file:null,busy:false,msg:null,confirmDel:null,cmpOld:null,cmpNew:null,cmpStation:''}};
+let saved={};try{saved=JSON.parse(localStorage.getItem('komuter-pair')||'{}');}catch(e){}
+
+function nowKL(){
+  const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',second:'2-digit',weekday:'short',hourCycle:'h23'}).formatToParts(new Date());
+  const g=k=>p.find(x=>x.type===k).value;const min=+g('hour')*60+ +g('minute');return{min,sec:min*60+ +g('second'),wd:g('weekday')};
+}
+const view=()=>location.hash==='#admin'?'admin':'rider';
+function render(){ if(view()==='admin') renderAdmin(); else renderRider(); }
+
+/* ---------------- Rider view ---------------- */
+function liveRev(svc){const id=S.live[svc];return id&&S.revMap[id]?S.revMap[id]:null;}
+function trips(rev,from,to){
+  const out=[];
+  rev.tables.forEach(tb=>{const a=tb.stations.indexOf(from),b=tb.stations.indexOf(to);if(a<0||b<0||b<=a)return;
+    tb.trains.forEach(tr=>{const d=tr.times[a],r=tr.times[b];if(d&&r)out.push({no:tr.no,dep:d,arr:r,stops:tb.stations.map((s,i)=>[s,tr.times[i]]).filter(x=>x[1]),from,to});});});
+  return out.sort((x,y)=>toMin(x.dep)-toMin(y.dep));
+}
+/* live onboard tracker */
+const tripKey=x=>x?x.no+'|'+x.from+'|'+x.to:'';
+function onboardTrip(nowSec){
+  const R=S.rider;if(!R.todayRuns||!R.list)return null;
+  const c=R.list.filter(x=>toMin(x.dep)*60<=nowSec&&nowSec<toMin(x.arr)*60);
+  R.candidates=c;
+  const live=c.filter(x=>tripKey(x)!==R.dismissed);
+  if(!live.length)return null;
+  return live.find(x=>x.no===R.pickNo)||live[live.length-1];
+}
+function mmss(s){s=Math.max(0,Math.round(s));const m=Math.floor(s/60),r=s%60;return m>=60?Math.floor(m/60)+' h '+(m%60)+' min':m?m+' min '+String(r).padStart(2,'0')+' s':r+' s';}
+function trackerHtml(x,nowSec){
+  const st=x.stops.map(s=>({name:s[0],t:s[1],sec:toMin(s[1])*60}));
+  const a=st.findIndex(s=>s.name===x.from),b=st.findIndex(s=>s.name===x.to);
+  const seg=st.slice(a,b+1);
+  let pi=0;seg.forEach((s,i)=>{if(s.sec<=nowSec)pi=i;});
+  const prev=seg[pi],next=seg[Math.min(pi+1,seg.length-1)],dest=seg[seg.length-1];
+  const atStation=nowSec-prev.sec<60;
+  const toNext=next.sec-nowSec,span=Math.max(60,next.sec-prev.sec);
+  const frac=atStation?0:Math.min(1,Math.max(0,(nowSec-prev.sec)/span));
+  const tripFrac=Math.min(1,Math.max(0,(nowSec-seg[0].sec)/Math.max(60,dest.sec-seg[0].sec)));
+  const stopsLeft=seg.length-1-pi, end=x.stops[x.stops.length-1][0];
+  const arriving=!atStation&&toNext<=60;
+  let lbl,now;
+  if(atStation&&pi===0){lbl='Departing';now=esc(nice(prev.name));}
+  else if(atStation){lbl='Stopped at';now=esc(nice(prev.name));}
+  else if(arriving){lbl='Arriving at';now=esc(nice(next.name));}
+  else{lbl='Between stations';now=esc(nice(prev.name))+' → '+esc(nice(next.name));}
+  const nextIsDest=next===dest;
+  const alt=(S.rider.candidates||[]).filter(c=>c.no!==x.no);
+  return '<div class="tk-top"><span class="live"><i></i>Live · on board</span><span class="tk-train">Train '+esc(x.no)+' to '+esc(nice(end))+'</span></div>'+
+    '<div class="tk-status"><span class="lbl">'+lbl+'</span><div class="tk-now">'+now+'</div></div>'+
+    '<div class="tk-count">'+(nextIsDest?'Your stop, ':'Next stop ')+esc(nice(next.name))+' in '+mmss(toNext)+' <small>· due '+next.t+'</small></div>'+
+    '<div class="leg"><div class="end"><span>Previous</span><strong>'+esc(nice(prev.name))+'</strong><em>'+prev.t+'</em></div>'+
+      '<div class="track" role="progressbar" aria-label="Progress to next station" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(frac*100)+'"><b style="width:'+(frac*100).toFixed(1)+'%"></b><span class="train" style="left:'+(frac*100).toFixed(1)+'%"></span></div>'+
+      '<div class="end r"><span>Next</span><strong>'+esc(nice(next.name))+'</strong><em>'+next.t+'</em></div></div>'+
+    '<div class="trip"><div class="tbar"><b style="width:'+(tripFrac*100).toFixed(1)+'%"></b></div><div class="facts"><span>'+esc(nice(seg[0].name))+' '+seg[0].t+'</span><span>'+stopsLeft+' stop'+(stopsLeft===1?'':'s')+' to '+esc(nice(dest.name))+' · '+mmss(dest.sec-nowSec)+' left</span><span>'+esc(nice(dest.name))+' '+dest.t+'</span></div></div>'+
+    '<div class="tk-alt">'+(alt.length?'On a different train? '+alt.map(c=>'<button class="btn sm" type="button" data-pick="'+esc(c.no)+'">Train '+esc(c.no)+' ('+c.dep+')</button>').join(''):'')+'<button class="btn sm" type="button" data-hide-tracker>Not on board</button></div>';
+}
+function wireTracker(){
+  const el=$('tracker');if(!el)return;
+  el.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{S.rider.pickNo=b.dataset.pick;S.rider.dismissed=null;renderRider();});
+  const h=el.querySelector('[data-hide-tracker]');if(h)h.onclick=()=>{S.rider.dismissed=tripKey(S.rider.trip);renderRider();};
+}
+function tick(){
+  if(view()!=='rider'||!S.rider.list)return;
+  const {sec}=nowKL();const t=onboardTrip(sec);
+  if(tripKey(t)!==tripKey(S.rider.trip)){if(document.activeElement?.tagName!=='SELECT')renderRider();return;}
+  if(t){const el=$('tracker');if(el){el.innerHTML=trackerHtml(t,sec);wireTracker();}}
+}
+
+const ICONS={pin:'<path d="M12 21s-6-5.6-6-11a6 6 0 1 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',list:'<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>'};
+function fold(key,icon,title,sub,inner){
+  const open=!!S.rider.folds[key];
+  return '<section class="fold'+(open?' open':'')+'"><button class="fold-h" type="button" data-fold="'+key+'" aria-expanded="'+open+'" aria-controls="fold-'+key+'">'+
+    '<span class="fold-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICONS[icon]+'</svg></span>'+
+    '<span class="fold-t"><strong>'+esc(title)+'</strong><span>'+esc(sub)+'</span></span>'+
+    '<svg class="chev" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>'+
+    '<div class="fold-b" id="fold-'+key+'"'+(open?'':' hidden')+'>'+inner+'</div></section>';
+}
+function renderRider(){
+  const app=$('app');
+  const prevFrom=$('from')?.value, prevTo=$('to')?.value, past=$('showPast')?.checked??!!saved.past;
+  const {min:now,sec:nowSec,wd}=nowKL(); const weekendDay=wd==='Sat'||wd==='Sun';
+  const svcs=['weekday','weekend'].filter(s=>liveRev(s));
+  if(!S.rider.svc||!svcs.includes(S.rider.svc)) S.rider.svc=svcs.includes(weekendDay?'weekend':'weekday')?(weekendDay?'weekend':'weekday'):svcs[0]||null;
+  const rev=S.rider.svc?liveRev(S.rider.svc):null;
+  const adminLink=S.canEdit?'<a href="#admin">Manage timetables</a>':'';
+  if(!rev){
+    app.innerHTML='<div class="wrap"><section class="board"><div><div class="eyebrow">KTM Komuter · Seremban Line</div><h1>'+
+      (S.dbMissing?'Timetable unavailable':S.loaded?'No timetable published yet':'Loading timetable…')+'</h1></div><div class="next"><div class="sub">'+
+      (S.dbMissing?'The saved timetable can\'t be reached from this view. Open the page while signed in to claude.ai.':S.loaded?'An editor needs to upload a timetable PDF and make it live.':S.slow?'The timetable is taking longer than usual to load. It will appear when the connection returns.':'Fetching the live schedule.')+
+      '</div></div></section><footer>'+adminLink+'</footer></div>';
+    return;
+  }
+  const stations=rev.stations;
+  let from=prevFrom||saved.from, to=prevTo||saved.to;
+  if(!stations.includes(from)) from=stations.includes('KAJANG')?'KAJANG':stations[0];
+  if(!stations.includes(to)) to=stations.includes('KL SENTRAL')?'KL SENTRAL':stations[stations.length-1];
+  const opts=sel=>stations.map(s=>'<option value="'+esc(s)+'"'+(s===sel?' selected':'')+'>'+esc(nice(s))+'</option>').join('');
+  const svcBtns=svcs.length>1?'<div class="svc" role="group" aria-label="Service days">'+svcs.map(s=>'<button type="button" data-svc="'+s+'" aria-pressed="'+(s===S.rider.svc)+'">'+SVC[s]+'</button>').join('')+'</div>':'';
+  const mismatch=(S.rider.svc==='weekday'&&weekendDay)||(S.rider.svc==='weekend'&&!weekendDay);
+  const todayRuns=!mismatch;
+  try{localStorage.setItem('komuter-pair',JSON.stringify({from,to,past}));}catch(e){}
+
+  let nextHtml='',rowsHtml='';
+  const R=S.rider; if(R.pairKey!==from+'|'+to){R.pairKey=from+'|'+to;R.dismissed=null;R.pickNo=null;}
+  R.list=null;R.todayRuns=todayRuns;R.trip=null;
+  if(from===to){rowsHtml='<div class="empty">Choose a different destination.</div>';}
+  else{
+    const list=trips(rev,from,to);
+    R.list=list;R.trip=onboardTrip(nowSec);
+    if(tripKey(R.trip)!==R.foldKey){R.foldKey=tripKey(R.trip);R.folds={};}
+    const upcoming=list.filter(x=>toMin(x.dep)>=now);
+    const nxt=todayRuns?upcoming[0]:null;
+    if(!list.length) nextHtml='<div class="sub">No direct train runs between these stations on this timetable.</div>';
+    else if(nxt){const w=toMin(nxt.dep)-now;nextHtml='<div><div class="eyebrow">Next train</div><div class="big">'+nxt.dep+'</div></div><div class="sub">'+(w===0?'Leaving now':'in '+fmtDur(w))+' · arrives '+nxt.arr+'<br>'+(upcoming.length-1)+' more today</div>';}
+    else nextHtml='<div><div class="eyebrow">First train'+(todayRuns?' tomorrow':'')+'</div><div class="big">'+list[0].dep+'</div></div><div class="sub">'+(todayRuns?'No more trains today · ':'')+list.length+' trains a day</div>';
+    const trow=(x,mode)=>{
+      const isPast=mode==='today'&&todayRuns&&toMin(x.dep)<now, isNext=mode==='today'&&nxt&&x===nxt, w=toMin(x.dep)-now, open=S.rider.openNo===x.no+mode;
+      const a=x.stops.findIndex(s=>s[0]===from), b=x.stops.findIndex(s=>s[0]===to), end=x.stops[x.stops.length-1][0];
+      const onb=mode==='today'&&R.trip&&R.trip.no===x.no;
+      const wait=mode==='tomorrow'?'tmrw':!todayRuns?'':onb?'now':isPast?'left':w<=0?'now':w<120?w+'m':Math.floor(w/60)+'h '+(w%60)+'m';
+      return '<div class="item'+(onb?' onboard':isPast?' past':'')+(isNext?' is-next':'')+'"><button class="row" type="button" data-no="'+esc(x.no+mode)+'" aria-expanded="'+open+'">'+
+        '<span class="t">'+x.dep+'</span><span class="mid"><span class="bar"></span><span class="dur">'+fmtDur(toMin(x.arr)-toMin(x.dep))+(onb?'<span class="pill green">On board</span>':'')+(isNext?'<span class="pill">Next</span>':'')+'</span><span class="train">Train '+esc(x.no)+' to '+esc(nice(end))+'</span></span>'+
+        '<span class="t arr">'+x.arr+'</span><span class="wait">'+wait+'</span></button>'+
+        '<div class="stops"'+(open?'':' hidden')+'><ol>'+x.stops.map((s,i)=>'<li class="'+(i===a||i===b?'end':(i<a||i>b?'off':''))+'"><span>'+s[1]+'</span><span>'+esc(nice(s[0]))+'</span></li>').join('')+'</ol></div></div>';
+    };
+    const wkNext={Mon:'Tue',Tue:'Wed',Wed:'Thu',Thu:'Fri',Fri:'Sat',Sat:'Sun',Sun:'Mon'}[wd];
+    const tmrwWeekend=wkNext==='Sat'||wkNext==='Sun';
+    const tmrwRuns=S.rider.svc==='weekend'?tmrwWeekend:!tmrwWeekend;
+    if(!list.length) rowsHtml='<div class="empty">Trains on this timetable don\'t cover both stations. Try changing at KL Sentral or Mid Valley.</div>';
+    else if(past||!todayRuns) list.forEach(x=>rowsHtml+=trow(x,'today'));
+    else {
+      if(R.trip&&!upcoming.includes(R.trip)) rowsHtml+=trow(R.trip,'today');
+      if(upcoming.length) upcoming.forEach(x=>rowsHtml+=trow(x,'today'));
+      else if(tmrwRuns){rowsHtml+='<div class="divider">No more trains today · tomorrow\'s departures</div>';list.forEach(x=>rowsHtml+=trow(x,'tomorrow'));}
+      else rowsHtml+='<div class="empty">No more trains today. Tick “Show trains that already left” to see today\'s full list.</div>';
+    }
+    R.count=upcoming.length;
+  }
+  app.innerHTML='<div class="wrap">'+
+    (R.trip?'<section class="tracker" id="tracker" aria-live="polite" aria-label="Live trip tracker">'+trackerHtml(R.trip,nowSec)+'</section>':'')+
+    (()=>{const boardH='<section class="board" aria-label="Choose your trip"><div><div class="eyebrow">KTM Komuter · Seremban Line · '+esc(SVC[rev.service]||'')+'</div><h1>'+(from===to?'Pick two different stations':esc(nice(from))+' → '+esc(nice(to)))+'</h1></div>'+svcBtns+
+    '<div class="pick"><div class="fields"><div class="field"><label for="from">I\'m at</label><select id="from">'+opts(from)+'</select></div><div class="field"><label for="to">Going to</label><select id="to">'+opts(to)+'</select></div></div>'+
+    '<button class="swap" id="swap" type="button" aria-label="Swap stations" title="Swap stations">⇅</button></div><div class="next">'+nextHtml+'</div></section>';
+      const restH=(mismatch?'<div class="warn">You\'re viewing the '+SVC[S.rider.svc].toLowerCase()+' timetable, which doesn\'t run today.</div>':'')+
+    '<label class="toggle"><input type="checkbox" id="showPast"'+(past?' checked':'')+'> Show trains that already left</label>'+
+    '<section class="list" aria-live="polite"><div class="head"><span>Depart</span><span>Train</span><span style="text-align:right">Arrive</span><span style="text-align:right">In</span></div>'+rowsHtml+'</section>';
+      if(!R.trip) return boardH+restH;
+      return fold('board','pin','Your route',from===to?'':nice(from)+' → '+nice(to),boardH)+fold('list','list','Departures',R.count+' more today',restH);})()+
+    '<footer><span>'+esc(SVC[rev.service])+' timetable effective '+fmtDate(rev.effective)+' · Revision '+rev.n+'. Times are Malaysia time. Tap a train to see every stop.</span>'+adminLink+'</footer></div>';
+  $('from').onchange=()=>{S.rider.openNo=null;renderRider();};
+  $('to').onchange=()=>{S.rider.openNo=null;renderRider();};
+  $('showPast').onchange=renderRider;
+  $('swap').onclick=()=>{const f=$('from').value;$('from').value=$('to').value;$('to').value=f;S.rider.openNo=null;renderRider();};
+  wireTracker();
+  app.querySelectorAll('[data-fold]').forEach(b=>b.onclick=()=>{const k=b.dataset.fold,o=!R.folds[k];R.folds[k]=o;b.setAttribute('aria-expanded',String(o));b.parentElement.classList.toggle('open',o);$('fold-'+k).hidden=!o;});
+  app.querySelectorAll('[data-svc]').forEach(b=>b.onclick=()=>{S.rider.svc=b.dataset.svc;S.rider.openNo=null;renderRider();});
+  app.querySelectorAll('.row').forEach(b=>b.onclick=()=>{const p=b.nextElementSibling;p.hidden=!p.hidden;S.rider.openNo=p.hidden?null:b.dataset.no;b.setAttribute('aria-expanded',String(!p.hidden));});
+}
+
+/* ---------------- Admin view ---------------- */
+let pdfReady=null;
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Could not load '+src));document.head.appendChild(s);});}
+function loadPdfJs(){
+  if(!pdfReady) pdfReady=loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js').then(()=>loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js')).catch(e=>{pdfReady=null;throw e;});
+  return pdfReady;
+}
+async function handleFile(file){
+  const A=S.admin;
+  if(!file) return;
+  if(!/pdf$/i.test(file.type)&&!/\.pdf$/i.test(file.name)){A.msg={kind:'err',text:'That file isn\'t a PDF. Choose the timetable PDF published by KTM.'};renderAdmin();return;}
+  A.busy=true;A.msg={kind:'info',text:'Reading '+file.name+'…'};A.parsed=null;A.file=file;renderAdmin();
+  try{
+    await loadPdfJs();
+    const buf=await file.arrayBuffer();
+    const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+    const r=await parseTimetablePdf(pdf);
+    if(!r.trainCount){A.msg={kind:'err',text:'No train columns were found. The PDF needs a "NOMBOR TREN" row with train numbers and station rows with times, like the current KTM layout.'};A.file=null;}
+    else{A.parsed=r;A.msg=null;}
+  }catch(e){A.msg={kind:'err',text:'Couldn\'t read that PDF ('+(e.message||e)+'). If it\'s a scanned image rather than text, it can\'t be read automatically.'};A.file=null;}
+  A.busy=false;renderAdmin();
+}
+async function saveRevision(){
+  const A=S.admin,r=A.parsed;if(!r||A.busy)return;
+  const label=$('f-label').value.trim(), eff=$('f-eff').value, svc=$('f-svc').value, makeLive=$('f-live').checked;
+  if(!eff){A.msg={kind:'err',text:'Add the date this timetable takes effect.'};renderAdmin();return;}
+  A.busy=true;A.msg={kind:'info',text:'Saving…'};renderAdmin();
+  try{
+    let assetId=null;
+    if(S.assets){try{const up=await S.assets.upload(A.file);assetId=up.id;}catch(e){}}
+    const n=S.revs.reduce((m,x)=>Math.max(m,x.n||0),0)+1;
+    const uid=S.user&&S.user.id?await S.user.id():null;
+    const id='r'+n+'-'+Date.now().toString(36);
+    await S.db.doc('revisions/'+id).set({n,title:r.title,label:label||('Revision '+n),service:svc,effective:eff,fileName:A.file.name,assetId,uploadedAt:new Date().toISOString(),uploadedBy:uid,stations:r.stations,tables:r.tables,trainCount:r.trainCount,warnings:r.warnings});
+    if(makeLive){const live={...S.live,[svc]:id,updatedAt:new Date().toISOString()};await S.db.doc('config/live').set(live);}
+    const prev=S.revs.filter(x=>x.service===svc).sort((a,b)=>b.n-a.n)[0];
+    A.parsed=null;A.file=null;
+    A.msg={kind:'ok',text:'Saved as revision '+n+(makeLive?' and made live.':'.')+(assetId?'':' The PDF itself couldn\'t be stored, but the times were saved.')};
+    if(prev){A.cmpOld=prev._id;A.cmpNew=id;}
+  }catch(e){A.msg={kind:'err',text:'Save failed: '+(e.code==='quota_exceeded'?'storage is full, delete an old revision first.':(e.message||e.code||e))};}
+  A.busy=false;renderAdmin();
+}
+async function setLive(id){
+  const r=S.revMap[id];if(!r)return;
+  try{await S.db.doc('config/live').set({...S.live,[r.service]:id,updatedAt:new Date().toISOString()});S.admin.msg={kind:'ok',text:'Revision '+r.n+' is now the live '+SVC[r.service].toLowerCase()+' timetable.'};}
+  catch(e){S.admin.msg={kind:'err',text:'Couldn\'t change the live timetable: '+(e.message||e.code)};}
+  renderAdmin();
+}
+async function delRev(id){
+  const r=S.revMap[id];if(!r)return;
+  try{await S.db.doc('revisions/'+id).delete();if(r.assetId&&S.assets){try{await S.assets.delete(r.assetId);}catch(e){}}S.admin.msg={kind:'ok',text:'Revision '+r.n+' deleted.'};}
+  catch(e){S.admin.msg={kind:'err',text:'Couldn\'t delete: '+(e.message||e.code)};}
+  S.admin.confirmDel=null;renderAdmin();
+}
+function trainIndex(rev){const m={};rev.tables.forEach(tb=>tb.trains.forEach(tr=>{const st={};tb.stations.forEach((s,i)=>{if(tr.times[i])st[s]=tr.times[i];});m[tr.no]={no:tr.no,dir:tb.name,st,first:tb.stations.find((s,i)=>tr.times[i]),last:[...tb.stations].reverse().find((s,i)=>tr.times[tb.stations.length-1-i])};}));return m;}
+function diffRevs(a,b,station){
+  const A=trainIndex(a),B=trainIndex(b),out={added:[],removed:[],changed:[]};
+  const touches=t=>!station||t.st[station];
+  for(const no in B){if(!A[no]){if(touches(B[no]))out.added.push(B[no]);continue;}
+    const o=A[no],n=B[no],keys=[...new Set([...Object.keys(o.st),...Object.keys(n.st)])];
+    const order=b.stations.concat(a.stations.filter(s=>!b.stations.includes(s)));keys.sort((x,y)=>order.indexOf(x)-order.indexOf(y));
+    const ch=keys.filter(k=>o.st[k]!==n.st[k]&&(!station||k===station)).map(k=>({s:k,o:o.st[k],n:n.st[k]}));
+    if(ch.length)out.changed.push({no,dir:n.dir,ch});}
+  for(const no in A) if(!B[no]&&touches(A[no])) out.removed.push(A[no]);
+  const sa=new Set(a.stations),sb=new Set(b.stations);
+  out.stAdded=b.stations.filter(s=>!sa.has(s));out.stRemoved=a.stations.filter(s=>!sb.has(s));
+  return out;
+}
+function renderCompare(){
+  const A=S.admin,revs=[...S.revs].sort((x,y)=>y.n-x.n);
+  if(revs.length<2) return '<p class="muted">Upload a second timetable to compare revisions.</p>';
+  if(!A.cmpNew||!S.revMap[A.cmpNew]) A.cmpNew=revs[0]._id;
+  if(!A.cmpOld||!S.revMap[A.cmpOld]||A.cmpOld===A.cmpNew) A.cmpOld=(revs.find(r=>r._id!==A.cmpNew&&r.service===S.revMap[A.cmpNew].service)||revs.find(r=>r._id!==A.cmpNew))._id;
+  const o=S.revMap[A.cmpOld],n=S.revMap[A.cmpNew];
+  const opt=sel=>revs.map(r=>'<option value="'+r._id+'"'+(r._id===sel?' selected':'')+'>Rev '+r.n+' · '+esc(SVC[r.service])+' · from '+fmtDate(r.effective)+'</option>').join('');
+  const allSt=n.stations.concat(o.stations.filter(s=>!n.stations.includes(s)));
+  const d=diffRevs(o,n,A.cmpStation);
+  let h='<div class="cmpgrid"><div class="field"><label for="c-old">Old schedule</label><select id="c-old">'+opt(A.cmpOld)+'</select></div><div class="arrow">→</div><div class="field"><label for="c-new">New schedule</label><select id="c-new">'+opt(A.cmpNew)+'</select></div></div>'+
+    '<div class="field" style="max-width:280px"><label for="c-st">Only changes at</label><select id="c-st"><option value="">All stations</option>'+allSt.map(s=>'<option value="'+esc(s)+'"'+(s===A.cmpStation?' selected':'')+'>'+esc(nice(s))+'</option>').join('')+'</select></div>';
+  if(o.service!==n.service) h+='<div class="msg warnlist">These revisions are for different service days ('+SVC[o.service]+' vs '+SVC[n.service]+'), so most differences are expected.</div>';
+  h+='<div class="stats"><span class="chip mod">'+d.changed.length+' retimed</span><span class="chip add">+'+d.added.length+' new trains</span><span class="chip del">−'+d.removed.length+' removed</span>'+
+    (d.stAdded.length?'<span class="chip add">+'+d.stAdded.length+' stations</span>':'')+(d.stRemoved.length?'<span class="chip del">−'+d.stRemoved.length+' stations</span>':'')+'</div>';
+  if(d.stAdded.length) h+='<div class="msg ok">New stations: '+d.stAdded.map(s=>esc(nice(s))).join(', ')+'</div>';
+  if(d.stRemoved.length) h+='<div class="msg err">Stations dropped: '+d.stRemoved.map(s=>esc(nice(s))).join(', ')+'</div>';
+  if(!d.changed.length&&!d.added.length&&!d.removed.length){h+='<p class="muted">No train times differ'+(A.cmpStation?' at '+esc(nice(A.cmpStation)):'')+'.</p>';return h;}
+  const dirs=[...new Set([...d.changed.map(x=>x.dir),...d.added.map(x=>x.dir),...d.removed.map(x=>x.dir)])];
+  dirs.forEach(dir=>{
+    h+='<div class="dir">'+esc(dir.split(' → ').map(nice).join(' → '))+'</div>';
+    d.added.filter(x=>x.dir===dir).forEach(t=>{h+='<div class="chg"><h3>Train '+esc(t.no)+'<span class="chip add">New</span></h3><ul><li><span>'+esc(nice(t.first))+'</span><span class="new">'+t.st[t.first]+'</span></li><li><span>'+esc(nice(t.last))+'</span><span class="new">'+t.st[t.last]+'</span></li></ul></div>';});
+    d.removed.filter(x=>x.dir===dir).forEach(t=>{h+='<div class="chg"><h3>Train '+esc(t.no)+'<span class="chip del">Removed</span></h3><ul><li><span>'+esc(nice(t.first))+'</span><span class="old">'+t.st[t.first]+'</span></li><li><span>'+esc(nice(t.last))+'</span><span class="old">'+t.st[t.last]+'</span></li></ul></div>';});
+    d.changed.filter(x=>x.dir===dir).forEach(t=>{
+      h+='<div class="chg"><h3>Train '+esc(t.no)+'<span class="chip mod">'+t.ch.length+' stop'+(t.ch.length>1?'s':'')+'</span></h3><ul>'+t.ch.map(c=>{
+        const dl=c.o&&c.n?toMin(c.n)-toMin(c.o):null;
+        return '<li><span>'+esc(nice(c.s))+'</span><span>'+(c.o?'<span class="old">'+c.o+'</span> ':'<span class="delta">new stop</span> ')+(c.n?'→ <span class="new">'+c.n+'</span>':'→ <span class="delta">no longer stops</span>')+(dl!==null?' <span class="delta">('+(dl>0?'+':'')+dl+' min)</span>':'')+'</span></li>';}).join('')+'</ul></div>';
+    });
+  });
+  return h;
+}
+function renderAdmin(){
+  const app=$('app'),A=S.admin;
+  if(!S.canEdit){
+    app.innerHTML='<div class="wrap"><div class="card"><h2>Editors only</h2><p class="muted">Managing timetables needs edit access to this page. Ask the owner to share it with you as an Editor.</p><a class="btn" href="#">Back to timetable</a></div></div>';return;
+  }
+  const scrollY=window.scrollY;
+  const revs=[...S.revs].sort((x,y)=>y.n-x.n);
+  let up='';
+  if(A.parsed){
+    const r=A.parsed;
+    const tb=r.tables[0];
+    const prevTable='<div class="scroll"><table class="mini"><thead><tr><th>'+esc(nice(tb.stations[0]))+' → </th>'+tb.trains.map(t=>'<th>'+esc(t.no)+'</th>').join('')+'</tr></thead><tbody>'+
+      tb.stations.map((s,i)=>'<tr><td>'+esc(nice(s))+'</td>'+tb.trains.map(t=>'<td>'+(t.times[i]||'')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+    up='<div class="msg ok">Read <strong>'+esc(A.file.name)+'</strong>: '+r.tables.length+' direction'+(r.tables.length>1?'s':'')+', '+r.trainCount+' trains, '+r.stations.length+' stations.</div>'+
+      (r.warnings.length?'<div class="msg warnlist"><strong>Check these before saving:</strong><ul>'+r.warnings.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul></div>':'')+
+      '<div class="formgrid"><div class="field"><label for="f-label">Name</label><input type="text" id="f-label" value="'+esc('Timetable from '+fmtDate(r.effective))+'"></div>'+
+      '<div class="field"><label for="f-eff">Takes effect</label><input type="date" id="f-eff" value="'+esc(r.effective)+'"></div>'+
+      '<div class="field"><label for="f-svc">Service days</label><select id="f-svc">'+Object.keys(SVC).map(k=>'<option value="'+k+'"'+(k===r.service?' selected':'')+'>'+SVC[k]+'</option>').join('')+'</select></div></div>'+
+      '<label class="toggle"><input type="checkbox" id="f-live" checked> Make this the live timetable now</label>'+
+      '<details><summary class="muted" style="cursor:pointer">Preview first direction ('+esc(tb.name.split(' → ').map(nice).join(' → '))+')</summary>'+prevTable+'</details>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn accent" id="f-save" type="button"'+(A.busy?' disabled':'')+'>Save revision</button><button class="btn" id="f-cancel" type="button">Discard</button></div>';
+  } else {
+    up='<label class="drop" id="drop" for="f-file"><strong>Choose the new timetable PDF</strong><span>or drop it here. The times are read straight from the PDF.</span></label><input type="file" id="f-file" accept="application/pdf,.pdf" hidden>';
+  }
+  const log=revs.length?revs.map(r=>{
+    const isLive=S.live[r.service]===r._id, by=r.uploadedBy?(S.names[r.uploadedBy]||'Someone'):'Initial import';
+    const del=A.confirmDel===r._id?'<span class="confirm">Delete revision '+r.n+' for good? <button class="btn sm danger" data-del-yes="'+r._id+'" type="button">Delete</button><button class="btn sm" data-del-no type="button">Keep</button></span>':(!isLive?'<button class="btn sm danger" data-del="'+r._id+'" type="button">Delete</button>':'');
+    return '<div class="rev'+(isLive?' live':'')+'"><div class="revno">R'+r.n+'</div><div class="revbody"><div class="revtitle">'+esc(r.label)+(isLive?'<span class="pill">Live</span>':'')+'<span class="pill ghost">'+esc(SVC[r.service])+'</span></div>'+
+      '<div class="revmeta">Effective '+fmtDate(r.effective)+' · '+r.trainCount+' trains · '+r.stations.length+' stations</div>'+
+      '<div class="revmeta">Uploaded '+fmtStamp(r.uploadedAt)+' by '+esc(by)+' · '+esc(r.fileName||'')+'</div>'+
+      '<div class="revact">'+(!isLive?'<button class="btn sm primary" data-live="'+r._id+'" type="button">Make live</button>':'')+
+      (r.assetId?'<a class="btn sm" href="/_blob/'+esc(r.assetId)+'" target="_blank" rel="noopener">Open PDF</a>':'')+
+      '<button class="btn sm" data-cmp="'+r._id+'" type="button">Compare</button>'+del+'</div></div></div>';
+  }).join(''):'<p class="muted">'+(S.loaded?'No revisions yet. Upload the first timetable above.':'Loading revisions…')+'</p>';
+  app.innerHTML='<div class="wrap wide"><div class="topbar"><div><div class="eyebrow" style="opacity:1;color:var(--muted)">Seremban Line timetable</div><h1>Timetable admin</h1></div><a class="btn" href="#">View timetable</a></div>'+
+    (A.msg?'<div class="msg '+(A.msg.kind==='err'?'err':A.msg.kind==='ok'?'ok':'warnlist')+'" role="status">'+esc(A.msg.text)+'</div>':'')+
+    '<section class="card"><h2>Upload a new schedule</h2>'+up+'</section>'+
+    '<section class="card"><h2>Revision log</h2><div class="log">'+log+'</div></section>'+
+    '<section class="card" id="cmp"><h2>Compare schedules</h2>'+renderCompare()+'</section></div>';
+  window.scrollTo(0,scrollY);
+  const fi=$('f-file');
+  if(fi){fi.onchange=()=>handleFile(fi.files[0]);
+    const dz=$('drop');dz.ondragover=e=>{e.preventDefault();dz.classList.add('over');};dz.ondragleave=()=>dz.classList.remove('over');
+    dz.ondrop=e=>{e.preventDefault();dz.classList.remove('over');handleFile(e.dataTransfer.files[0]);};}
+  if($('f-save')) $('f-save').onclick=saveRevision;
+  if($('f-cancel')) $('f-cancel').onclick=()=>{A.parsed=null;A.file=null;A.msg=null;renderAdmin();};
+  app.querySelectorAll('[data-live]').forEach(b=>b.onclick=()=>setLive(b.dataset.live));
+  app.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{A.confirmDel=b.dataset.del;renderAdmin();});
+  app.querySelectorAll('[data-del-yes]').forEach(b=>b.onclick=()=>delRev(b.dataset.delYes));
+  app.querySelectorAll('[data-del-no]').forEach(b=>b.onclick=()=>{A.confirmDel=null;renderAdmin();});
+  app.querySelectorAll('[data-cmp]').forEach(b=>b.onclick=()=>{const r=S.revMap[b.dataset.cmp];A.cmpNew=r._id;const older=revs.find(x=>x.n<r.n&&x.service===r.service)||revs.find(x=>x._id!==r._id);A.cmpOld=older?older._id:null;renderAdmin();$('cmp').scrollIntoView({behavior:'smooth'});});
+  if($('c-old')){$('c-old').onchange=e=>{A.cmpOld=e.target.value;renderAdmin();};$('c-new').onchange=e=>{A.cmpNew=e.target.value;renderAdmin();};$('c-st').onchange=e=>{A.cmpStation=e.target.value;renderAdmin();};}
+}
+async function resolveNames(){
+  if(!S.user||!S.user.profiles)return;
+  const ids=[...new Set(S.revs.map(r=>r.uploadedBy).filter(Boolean))];if(!ids.length)return;
+  try{const ps=await S.user.profiles(ids);ids.forEach(id=>{S.names[id]=(ps[id]&&ps[id].name)||'Someone';});if(view()==='admin')renderAdmin();}catch(e){}
+}
+
+/* ---------------- Boot ---------------- */
+window.addEventListener('hashchange',()=>{S.admin.msg=null;render();window.scrollTo(0,0);});
+render();
+setInterval(()=>{if(view()==='rider'&&!document.querySelector('.stops:not([hidden])')&&document.activeElement?.tagName!=='SELECT')renderRider();},30000);
+setInterval(tick,1000);
+(async()=>{
+  const c=window.claude;
+  if(!c||!c.use){
+    // Standalone (e.g. GitHub Pages): load the exported snapshot instead of the claude.ai database.
+    try{
+      const j=await (await fetch('data/timetable.json',{cache:'no-cache'})).json();
+      S.revs=j.revisions||[];S.revMap={};S.revs.forEach(r=>S.revMap[r._id]=r);S.live=j.live||{};
+    }catch(e){S.dbMissing=true;}
+    S.loaded=true;render();return;
+  }
+  const [db,user,assets]=await Promise.all([c.use('db'),c.use('user'),c.use('assets')]);
+  S.db=db;S.user=user;S.assets=assets;
+  try{S.canEdit=user?!!(await user.canEdit()):false;}catch(e){}
+  if(!db){S.dbMissing=true;S.loaded=true;render();return;}
+  let gotRevs=false,gotLive=false;
+  const timer=setTimeout(()=>{S.slow=true;render();},10000);
+  const done=()=>{if(gotRevs&&gotLive){clearTimeout(timer);S.loaded=true;S.slow=false;}};
+  db.collection('revisions').onSnapshot(snap=>{
+    S.revs=snap.docs.map(d=>({...d.data(),_id:d.id}));S.revMap={};S.revs.forEach(r=>S.revMap[r._id]=r);
+    if(!snap.metadata.fromCache){gotRevs=true;done();}
+    if(view()==='rider')renderRider();else if(!S.admin.parsed)renderAdmin();
+    resolveNames();
+  },e=>{clearTimeout(timer);gotRevs=true;S.loaded=true;render();});
+  db.doc('config/live').onSnapshot(snap=>{
+    S.live=snap.exists?{...snap.data()}:{};
+    if(!snap.metadata.fromCache){gotLive=true;done();}
+    if(view()==='rider')renderRider();else if(!S.admin.parsed)renderAdmin();
+  },e=>{clearTimeout(timer);gotLive=true;S.loaded=true;render();});
+})();
+</script>
+
+</body></html>
