@@ -167,6 +167,15 @@ table.mini thead th{font-family:var(--f-display);color:var(--muted)}
 .item.onboard .row{background:var(--good-bg);box-shadow:inset 4px 0 0 var(--good)}
 .item.onboard .t,.item.onboard .dur{color:var(--good)}
 .pill.green{background:var(--good);color:var(--surface)}
+.tno{display:inline-block;font:700 13px var(--f-display);letter-spacing:.03em;color:var(--ink);background:color-mix(in srgb,var(--line) 70%,var(--surface));border-radius:5px;padding:0 6px;margin-right:4px;font-variant-numeric:tabular-nums}
+.item.past .tno{color:var(--past);background:transparent;border:1px solid var(--line)}
+.item.onboard .tno{background:var(--good);color:var(--surface)}
+.board .tno{background:rgba(255,255,255,.14);color:var(--board-ink)}
+.mbox{display:flex;flex-direction:column;gap:8px}
+.mbox .mrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.mbox label{font:600 12px var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.mbox input{font:700 18px var(--f-display);font-variant-numeric:tabular-nums;width:7.5em;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.tracker .mbox{border-top:1px dashed color-mix(in srgb,var(--good) 45%,transparent);padding-top:12px}
 
 @media (prefers-reduced-motion:no-preference){.row,.btn{transition:background .15s,border-color .15s}}
 </style>
@@ -258,6 +267,11 @@ const S={db:null,user:null,assets:null,canEdit:false,revs:[],revMap:{},live:{},l
   rider:{svc:null,openNo:null,folds:{},foldKey:''},names:{},
   admin:{parsed:null,file:null,busy:false,msg:null,confirmDel:null,cmpOld:null,cmpNew:null,cmpStation:''}};
 let saved={};try{saved=JSON.parse(localStorage.getItem('komuter-pair')||'{}');}catch(e){}
+const dayKL=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date());
+const busyUI=()=>['SELECT','INPUT'].includes(document.activeElement?.tagName);
+/* manual "I'm on this train" choice, kept for the rest of the day */
+try{const m=JSON.parse(localStorage.getItem('komuter-manual')||'null');if(m&&m.day===dayKL())S.rider.manual=m;}catch(e){}
+function saveManual(){try{const m=S.rider.manual;if(m)localStorage.setItem('komuter-manual',JSON.stringify(m));else localStorage.removeItem('komuter-manual');}catch(e){}}
 
 function nowKL(){
   const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',second:'2-digit',weekday:'short',hourCycle:'h23'}).formatToParts(new Date());
@@ -275,9 +289,32 @@ function trips(rev,from,to){
   return out.sort((x,y)=>toMin(x.dep)-toMin(y.dep));
 }
 /* live onboard tracker */
-const tripKey=x=>x?x.no+'|'+x.from+'|'+x.to:'';
+const tripKey=x=>x?(x.manual?'m|':'')+x.no+'|'+x.from+'|'+x.to:'';
+function findTrain(no){
+  const R=S.rider,svcs=[R.svc,...['weekday','weekend'].filter(s=>s!==R.svc)];
+  for(const svc of svcs){const rev=liveRev(svc);if(!rev)continue;
+    for(const tb of rev.tables){const tr=tb.trains.find(t=>t.no===no);if(tr)return{svc,stops:tb.stations.map((s,i)=>[s,tr.times[i]]).filter(x=>x[1])};}}
+  return null;
+}
+const EARLY=30*60; // a manual train can be tracked from 30 min before it departs
+function manualTrip(nowSec){
+  const m=S.rider.manual;if(!m)return null;
+  const f=findTrain(m.no);if(!f)return{missing:true};
+  const st=f.stops,last=st[st.length-1],sec=t=>toMin(t)*60;
+  if(nowSec>=sec(last[1]))return{ended:true,last};
+  if(nowSec<sec(st[0][1])-EARLY)return{early:true,first:st[0]};
+  let to=last[0];const ti=st.findIndex(s=>s[0]===m.to);if(ti>0&&sec(st[ti][1])>nowSec)to=m.to;
+  return{no:m.no,dep:st[0][1],arr:st.find(s=>s[0]===to)[1],stops:st,from:st[0][0],to,manual:true};
+}
 function onboardTrip(nowSec){
-  const R=S.rider;if(!R.todayRuns||!R.list)return null;
+  const R=S.rider;
+  if(R.manual){
+    const t=manualTrip(nowSec);
+    if(t&&t.no){R.candidates=[];return t;}
+    if(t&&t.ended)R.manualMsg={kind:'ok',text:'Train '+R.manual.no+' finished its run at '+nice(t.last[0])+' ('+t.last[1]+').'};
+    R.manual=null;saveManual();
+  }
+  if(!R.todayRuns||!R.list)return null;
   const c=R.list.filter(x=>toMin(x.dep)*60<=nowSec&&nowSec<toMin(x.arr)*60);
   R.candidates=c;
   const live=c.filter(x=>tripKey(x)!==R.dismissed);
@@ -298,13 +335,14 @@ function trackerHtml(x,nowSec){
   const stopsLeft=seg.length-1-pi, end=x.stops[x.stops.length-1][0];
   const arriving=!atStation&&toNext<=60;
   let lbl,now;
-  if(atStation&&pi===0){lbl='Departing';now=esc(nice(prev.name));}
+  if(nowSec<prev.sec){lbl='Waiting to depart · leaves '+prev.t;now=esc(nice(prev.name));}
+  else if(atStation&&pi===0){lbl='Departing';now=esc(nice(prev.name));}
   else if(atStation){lbl='Stopped at';now=esc(nice(prev.name));}
   else if(arriving){lbl='Arriving at';now=esc(nice(next.name));}
   else{lbl='Between stations';now=esc(nice(prev.name))+' → '+esc(nice(next.name));}
   const nextIsDest=next===dest;
   const alt=(S.rider.candidates||[]).filter(c=>c.no!==x.no);
-  return '<div class="tk-top"><span class="live"><i></i>Live · on board</span><span class="tk-train">Train '+esc(x.no)+' to '+esc(nice(end))+'</span></div>'+
+  return '<div class="tk-top"><span class="live"><i></i>Live · on board'+(x.manual?' · set by you':'')+'</span><span class="tk-train"><b class="tno">Train '+esc(x.no)+'</b> to '+esc(nice(end))+'</span></div>'+
     '<div class="tk-status"><span class="lbl">'+lbl+'</span><div class="tk-now">'+now+'</div></div>'+
     '<div class="tk-count">'+(nextIsDest?'Your stop, ':'Next stop ')+esc(nice(next.name))+' in '+mmss(toNext)+' <small>· due '+next.t+'</small></div>'+
     '<div class="leg"><div class="end"><span>Previous</span><strong>'+esc(nice(prev.name))+'</strong><em>'+prev.t+'</em></div>'+
@@ -316,13 +354,46 @@ function trackerHtml(x,nowSec){
 function wireTracker(){
   const el=$('tracker');if(!el)return;
   el.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{S.rider.pickNo=b.dataset.pick;S.rider.dismissed=null;renderRider();});
-  const h=el.querySelector('[data-hide-tracker]');if(h)h.onclick=()=>{S.rider.dismissed=tripKey(S.rider.trip);renderRider();};
+  const h=el.querySelector('[data-hide-tracker]');if(h)h.onclick=()=>{const R=S.rider;if(R.trip&&R.trip.manual){R.manual=null;saveManual();}else R.dismissed=tripKey(R.trip);renderRider();};
+}
+/* manual train entry */
+function manualBox(inTracker){
+  const R=S.rider,msg=R.manualMsg?'<div class="msg '+(R.manualMsg.kind==='err'?'err':'ok')+'" role="status">'+esc(R.manualMsg.text)+'</div>':'';
+  if(!R.manualOpen) return '<div class="mbox">'+msg+'<div class="mrow"><button class="btn sm" type="button" id="m-open">'+(inTracker?'Wrong train? Enter train number':'On a train? Enter its number to track it')+'</button>'+
+    '</div></div>';
+  return '<form class="mbox" id="m-form" autocomplete="off"><label for="m-no">Train number you\'re on</label>'+
+    '<div class="mrow"><input id="m-no" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="e.g. 2041" value="'+esc(R.manualDraft||'')+'">'+
+    '<button class="btn sm accent" type="submit">Track this train</button><button class="btn sm" type="button" id="m-cancel">Cancel</button></div>'+msg+
+    '<span class="muted" style="font-size:13px">The number is on the departure board and the train\'s front display. Your selected destination is used if the train stops there.</span></form>';
+}
+function submitManual(raw){
+  const R=S.rider,no=String(raw||'').replace(/\D/g,'');R.manualDraft=no;
+  if(!no){R.manualMsg={kind:'err',text:'Type the train number, e.g. 2041.'};renderRider();return;}
+  const f=findTrain(no);
+  if(!f){R.manualMsg={kind:'err',text:'Train '+no+' isn\'t in the live timetable. Check the number on the platform display.'};renderRider();return;}
+  const prev=R.manual;R.manual={no,to:$('to')?.value||'',day:dayKL()};
+  const t=manualTrip(nowKL().sec);
+  if(!t.no){
+    R.manual=prev;
+    R.manualMsg={kind:'err',text:t.ended?'Train '+no+' already finished today at '+nice(t.last[0])+' ('+t.last[1]+').':'Train '+no+' leaves '+nice(t.first[0])+' at '+t.first[1]+'. You can start tracking it 30 minutes before.'};
+    renderRider();return;
+  }
+  saveManual();R.dismissed=null;R.manualOpen=false;R.manualMsg=null;R.manualDraft='';
+  if(f.svc!==R.svc)R.svc=f.svc;
+  renderRider();window.scrollTo(0,0);
+}
+function wireManual(){
+  const R=S.rider;
+  const o=$('m-open');if(o)o.onclick=()=>{R.manualOpen=true;R.manualMsg=null;renderRider();const i=$('m-no');if(i)i.focus();};
+  const c=$('m-cancel');if(c)c.onclick=()=>{R.manualOpen=false;R.manualMsg=null;R.manualDraft='';renderRider();};
+  const f=$('m-form');if(f)f.onsubmit=e=>{e.preventDefault();submitManual($('m-no').value);};
+  const i=$('m-no');if(i)i.oninput=()=>{R.manualDraft=i.value;};
 }
 function tick(){
-  if(view()!=='rider'||!S.rider.list)return;
+  if(view()!=='rider'||(!S.rider.list&&!S.rider.manual))return;
   const {sec}=nowKL();const t=onboardTrip(sec);
-  if(tripKey(t)!==tripKey(S.rider.trip)){if(document.activeElement?.tagName!=='SELECT')renderRider();return;}
-  if(t){const el=$('tracker');if(el){el.innerHTML=trackerHtml(t,sec);wireTracker();}}
+  if(tripKey(t)!==tripKey(S.rider.trip)){if(!busyUI())renderRider();return;}
+  if(t){const el=$('tk-body');if(el){el.innerHTML=trackerHtml(t,sec);wireTracker();}}
 }
 
 const ICONS={pin:'<path d="M12 21s-6-5.6-6-11a6 6 0 1 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',list:'<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>'};
@@ -362,7 +433,7 @@ function renderRider(){
   let nextHtml='',rowsHtml='';
   const R=S.rider; if(R.pairKey!==from+'|'+to){R.pairKey=from+'|'+to;R.dismissed=null;R.pickNo=null;}
   R.list=null;R.todayRuns=todayRuns;R.trip=null;
-  if(from===to){rowsHtml='<div class="empty">Choose a different destination.</div>';}
+  if(from===to){rowsHtml='<div class="empty">Choose a different destination.</div>';R.trip=onboardTrip(nowSec);}
   else{
     const list=trips(rev,from,to);
     R.list=list;R.trip=onboardTrip(nowSec);
@@ -370,15 +441,15 @@ function renderRider(){
     const upcoming=list.filter(x=>toMin(x.dep)>=now);
     const nxt=todayRuns?upcoming[0]:null;
     if(!list.length) nextHtml='<div class="sub">No direct train runs between these stations on this timetable.</div>';
-    else if(nxt){const w=toMin(nxt.dep)-now;nextHtml='<div><div class="eyebrow">Next train</div><div class="big">'+nxt.dep+'</div></div><div class="sub">'+(w===0?'Leaving now':'in '+fmtDur(w))+' · arrives '+nxt.arr+'<br>'+(upcoming.length-1)+' more today</div>';}
-    else nextHtml='<div><div class="eyebrow">First train'+(todayRuns?' tomorrow':'')+'</div><div class="big">'+list[0].dep+'</div></div><div class="sub">'+(todayRuns?'No more trains today · ':'')+list.length+' trains a day</div>';
+    else if(nxt){const w=toMin(nxt.dep)-now;nextHtml='<div><div class="eyebrow">Next train</div><div class="big">'+nxt.dep+'</div></div><div class="sub"><b class="tno">Train '+esc(nxt.no)+'</b> '+(w===0?'Leaving now':'in '+fmtDur(w))+' · arrives '+nxt.arr+'<br>'+(upcoming.length-1)+' more today</div>';}
+    else nextHtml='<div><div class="eyebrow">First train'+(todayRuns?' tomorrow':'')+'</div><div class="big">'+list[0].dep+'</div></div><div class="sub"><b class="tno">Train '+esc(list[0].no)+'</b> '+(todayRuns?'No more trains today · ':'')+list.length+' trains a day</div>';
     const trow=(x,mode)=>{
       const isPast=mode==='today'&&todayRuns&&toMin(x.dep)<now, isNext=mode==='today'&&nxt&&x===nxt, w=toMin(x.dep)-now, open=S.rider.openNo===x.no+mode;
       const a=x.stops.findIndex(s=>s[0]===from), b=x.stops.findIndex(s=>s[0]===to), end=x.stops[x.stops.length-1][0];
       const onb=mode==='today'&&R.trip&&R.trip.no===x.no;
       const wait=mode==='tomorrow'?'tmrw':!todayRuns?'':onb?'now':isPast?'left':w<=0?'now':w<120?w+'m':Math.floor(w/60)+'h '+(w%60)+'m';
       return '<div class="item'+(onb?' onboard':isPast?' past':'')+(isNext?' is-next':'')+'"><button class="row" type="button" data-no="'+esc(x.no+mode)+'" aria-expanded="'+open+'">'+
-        '<span class="t">'+x.dep+'</span><span class="mid"><span class="bar"></span><span class="dur">'+fmtDur(toMin(x.arr)-toMin(x.dep))+(onb?'<span class="pill green">On board</span>':'')+(isNext?'<span class="pill">Next</span>':'')+'</span><span class="train">Train '+esc(x.no)+' to '+esc(nice(end))+'</span></span>'+
+        '<span class="t">'+x.dep+'</span><span class="mid"><span class="bar"></span><span class="dur">'+fmtDur(toMin(x.arr)-toMin(x.dep))+(onb?'<span class="pill green">On board</span>':'')+(isNext?'<span class="pill">Next</span>':'')+'</span><span class="train"><b class="tno">Train '+esc(x.no)+'</b>to '+esc(nice(end))+'</span></span>'+
         '<span class="t arr">'+x.arr+'</span><span class="wait">'+wait+'</span></button>'+
         '<div class="stops"'+(open?'':' hidden')+'><ol>'+x.stops.map((s,i)=>'<li class="'+(i===a||i===b?'end':(i<a||i>b?'off':''))+'"><span>'+s[1]+'</span><span>'+esc(nice(s[0]))+'</span></li>').join('')+'</ol></div></div>';
     };
@@ -388,7 +459,7 @@ function renderRider(){
     if(!list.length) rowsHtml='<div class="empty">Trains on this timetable don\'t cover both stations. Try changing at KL Sentral or Mid Valley.</div>';
     else if(past||!todayRuns) list.forEach(x=>rowsHtml+=trow(x,'today'));
     else {
-      if(R.trip&&!upcoming.includes(R.trip)) rowsHtml+=trow(R.trip,'today');
+      if(R.trip){const inList=list.find(x=>x.no===R.trip.no);if(inList&&!upcoming.includes(inList))rowsHtml+=trow(inList,'today');}
       if(upcoming.length) upcoming.forEach(x=>rowsHtml+=trow(x,'today'));
       else if(tmrwRuns){rowsHtml+='<div class="divider">No more trains today · tomorrow\'s departures</div>';list.forEach(x=>rowsHtml+=trow(x,'tomorrow'));}
       else rowsHtml+='<div class="empty">No more trains today. Tick “Show trains that already left” to see today\'s full list.</div>';
@@ -396,11 +467,11 @@ function renderRider(){
     R.count=upcoming.length;
   }
   app.innerHTML='<div class="wrap">'+
-    (R.trip?'<section class="tracker" id="tracker" aria-live="polite" aria-label="Live trip tracker">'+trackerHtml(R.trip,nowSec)+'</section>':'')+
+    (R.trip?'<section class="tracker" id="tracker" aria-label="Live trip tracker"><div id="tk-body" style="display:flex;flex-direction:column;gap:14px" aria-live="polite">'+trackerHtml(R.trip,nowSec)+'</div>'+manualBox(true)+'</section>':'')+
     (()=>{const boardH='<section class="board" aria-label="Choose your trip"><div><div class="eyebrow">KTM Komuter · Seremban Line · '+esc(SVC[rev.service]||'')+'</div><h1>'+(from===to?'Pick two different stations':esc(nice(from))+' → '+esc(nice(to)))+'</h1></div>'+svcBtns+
     '<div class="pick"><div class="fields"><div class="field"><label for="from">I\'m at</label><select id="from">'+opts(from)+'</select></div><div class="field"><label for="to">Going to</label><select id="to">'+opts(to)+'</select></div></div>'+
     '<button class="swap" id="swap" type="button" aria-label="Swap stations" title="Swap stations">⇅</button></div><div class="next">'+nextHtml+'</div></section>';
-      const restH=(mismatch?'<div class="warn">You\'re viewing the '+SVC[S.rider.svc].toLowerCase()+' timetable, which doesn\'t run today.</div>':'')+
+      const restH=(R.trip?'':manualBox(false))+(mismatch?'<div class="warn">You\'re viewing the '+SVC[S.rider.svc].toLowerCase()+' timetable, which doesn\'t run today.</div>':'')+
     '<label class="toggle"><input type="checkbox" id="showPast"'+(past?' checked':'')+'> Show trains that already left</label>'+
     '<section class="list" aria-live="polite"><div class="head"><span>Depart</span><span>Train</span><span style="text-align:right">Arrive</span><span style="text-align:right">In</span></div>'+rowsHtml+'</section>';
       if(!R.trip) return boardH+restH;
@@ -410,7 +481,7 @@ function renderRider(){
   $('to').onchange=()=>{S.rider.openNo=null;renderRider();};
   $('showPast').onchange=renderRider;
   $('swap').onclick=()=>{const f=$('from').value;$('from').value=$('to').value;$('to').value=f;S.rider.openNo=null;renderRider();};
-  wireTracker();
+  wireTracker();wireManual();
   app.querySelectorAll('[data-fold]').forEach(b=>b.onclick=()=>{const k=b.dataset.fold,o=!R.folds[k];R.folds[k]=o;b.setAttribute('aria-expanded',String(o));b.parentElement.classList.toggle('open',o);$('fold-'+k).hidden=!o;});
   app.querySelectorAll('[data-svc]').forEach(b=>b.onclick=()=>{S.rider.svc=b.dataset.svc;S.rider.openNo=null;renderRider();});
   app.querySelectorAll('.row').forEach(b=>b.onclick=()=>{const p=b.nextElementSibling;p.hidden=!p.hidden;S.rider.openNo=p.hidden?null:b.dataset.no;b.setAttribute('aria-expanded',String(!p.hidden));});
@@ -615,7 +686,7 @@ function resetLocal(){
 /* ---------------- Boot ---------------- */
 window.addEventListener('hashchange',()=>{S.admin.msg=null;render();window.scrollTo(0,0);});
 render();
-setInterval(()=>{if(view()==='rider'&&!document.querySelector('.stops:not([hidden])')&&document.activeElement?.tagName!=='SELECT')renderRider();},30000);
+setInterval(()=>{if(view()==='rider'&&!document.querySelector('.stops:not([hidden])')&&!busyUI())renderRider();},30000);
 setInterval(tick,1000);
 (async()=>{
   const c=window.claude;
