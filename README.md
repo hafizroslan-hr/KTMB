@@ -17,4 +17,8 @@ When the page runs on claude.ai it reads the live database, and editors can uplo
 3. Changes are saved **in your browser only** until you click **Export timetable.json**.
 4. Replace `seremban-timetable/data/timetable.json` in the repo with the downloaded file and commit. Everyone then sees the update.
 
+### Appearance
+
+The page uses a glass look over a rail-track background by default. Switch between **Glass** and **Classic** under **Appearance** in the admin view; the choice is saved in `timetable.json` (`"look"`), so it reaches everyone once the exported file is committed. Riders who turn on *Reduce transparency* or *Increase contrast* on their device always get solid panels.
+
 Visitors who upload a PDF only change their own browser's copy; the published timetable changes only when a new `timetable.json` is committed. To preview locally, serve the folder over HTTP (e.g. `python3 -m http.server` inside `seremban-timetable/`), because browsers block `fetch` from `file://`. To publish, enable GitHub Pages on this repo.

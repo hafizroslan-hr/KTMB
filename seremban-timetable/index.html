@@ -187,6 +187,123 @@ table.mini thead th{font-family:var(--f-display);color:var(--muted)}
 @media (prefers-reduced-motion:no-preference){.row,.btn{transition:background .15s,border-color .15s}}
 </style>
 
+<style id="glass-theme">
+/* Glass theme. Layout: unchanged from the classic design. Clear, frosted panes float over a rail yard drawn in
+   KTM Seremban Line blue: tracks, sleepers and a turnout, softened by the glass above them.
+   Everything is scoped to :root.glass, so removing the class gives the classic look back. */
+:root{
+  --line-blue:#3C5A9F;            /* KTM Seremban Line colour (official GTFS route colour) */
+  --sky:#e2e9f1;                  /* page base under the glass */
+  --sky-a:rgba(60,90,159,.48);    /* Seremban blue glow */
+  --sky-b:rgba(232,163,23,.34);   /* signal amber glow */
+  --sky-c:rgba(31,122,77,.22);    /* signal green glow */
+  --rail:rgba(20,48,74,.38);      /* steel rails */
+  --sleeper:rgba(20,48,74,.16);   /* concrete sleepers */
+  --ballast:rgba(60,90,159,.08);  /* ballast bed under the track */
+  --glass:rgba(255,255,255,.36);
+  --glass-hi:rgba(255,255,255,.95);   /* top edge highlight */
+  --glass-sheen:rgba(255,255,255,.55);/* diagonal light across the pane */
+  --glass-edge:rgba(255,255,255,.75);
+  --glass-line:rgba(20,35,44,.12);    /* outer hairline so panes read on pale areas */
+  --glass-shadow:0 18px 40px -16px rgba(19,48,61,.40);
+  --glass-board:rgba(19,48,61,.78);
+  --glass-tint-next:rgba(232,163,23,.24);
+  --glass-tint-good:rgba(31,122,77,.16);
+  --glass-wash:rgba(255,255,255,.22);
+  --glass-muted:#3d4b55;          /* muted text darkened to keep 4.5:1 on clear glass */
+  --glass-good:#125434;           /* green text darkened for the same reason */
+  --glass-blur:28px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --sky:#0a1419; --sky-a:rgba(72,108,190,.50); --sky-b:rgba(240,180,58,.16); --sky-c:rgba(95,211,154,.13);
+  --rail:rgba(170,200,232,.24); --sleeper:rgba(170,200,232,.10); --ballast:rgba(72,108,190,.10);
+  --glass:rgba(20,36,46,.34); --glass-hi:rgba(255,255,255,.22); --glass-sheen:rgba(255,255,255,.07); --glass-edge:rgba(255,255,255,.16); --glass-line:rgba(0,0,0,.40);
+  --glass-shadow:0 18px 44px -16px rgba(0,0,0,.70); --glass-board:rgba(9,36,48,.72);
+  --glass-tint-next:rgba(240,180,58,.18); --glass-tint-good:rgba(95,211,154,.12); --glass-wash:rgba(255,255,255,.04);
+  --glass-muted:#b3c2cb; --glass-good:#5fd39a}}
+:root[data-theme="dark"]{
+  --sky:#0a1419; --sky-a:rgba(72,108,190,.50); --sky-b:rgba(240,180,58,.16); --sky-c:rgba(95,211,154,.13);
+  --rail:rgba(170,200,232,.24); --sleeper:rgba(170,200,232,.10); --ballast:rgba(72,108,190,.10);
+  --glass:rgba(20,36,46,.34); --glass-hi:rgba(255,255,255,.22); --glass-sheen:rgba(255,255,255,.07); --glass-edge:rgba(255,255,255,.16); --glass-line:rgba(0,0,0,.40);
+  --glass-shadow:0 18px 44px -16px rgba(0,0,0,.70); --glass-board:rgba(9,36,48,.72);
+  --glass-tint-next:rgba(240,180,58,.18); --glass-tint-good:rgba(95,211,154,.12); --glass-wash:rgba(255,255,255,.04);
+  --glass-muted:#b3c2cb; --glass-good:#5fd39a}
+
+/* the backdrop: colour glows, then the rail yard drawing on top of them */
+:root.glass body{background:var(--sky)}
+:root.glass body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(60% 45% at 12% 8%,var(--sky-a),transparent 70%),
+    radial-gradient(50% 40% at 95% 30%,var(--sky-b),transparent 70%),
+    radial-gradient(55% 45% at 30% 85%,var(--sky-c),transparent 70%),
+    radial-gradient(45% 35% at 85% 95%,var(--sky-a),transparent 70%),
+    var(--sky)}
+.rail-bg{display:none}
+:root.glass .rail-bg{display:block;position:fixed;inset:0;z-index:-1;pointer-events:none}
+.rail-bg svg{display:block;width:100%;height:100%}
+.rail-bg .ballast{fill:none;stroke:var(--ballast);stroke-width:96;stroke-linecap:round}
+.rail-bg .sleepers{fill:none;stroke:var(--sleeper);stroke-width:60;stroke-dasharray:9 20}
+.rail-bg .rails{fill:var(--rail)}
+:root.glass{--muted:var(--glass-muted);--good:var(--glass-good)}
+
+/* the glass surfaces */
+:root.glass :is(.list,.card,.fold,.tracker),:root.glass .board{
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(180%);backdrop-filter:blur(var(--glass-blur)) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 0 0 1px var(--glass-edge),0 0 0 1px var(--glass-line),var(--glass-shadow);border-color:transparent}
+:root.glass :is(.list,.card,.fold){background:linear-gradient(135deg,var(--glass-sheen) 0%,transparent 38%),var(--glass)}
+:root.glass .board{background:linear-gradient(135deg,rgba(255,255,255,.16) 0%,transparent 40%),var(--glass-board)}
+:root.glass .tracker{background:linear-gradient(135deg,var(--glass-sheen) 0%,transparent 40%),var(--glass-tint-good),var(--glass);
+  box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 0 0 1px color-mix(in srgb,var(--good) 45%,transparent),var(--glass-shadow)}
+:root.glass .board select{background-color:rgba(255,255,255,.10);border-color:rgba(255,255,255,.24)}
+
+/* glass inside glass: only the outer pane blurs (stacked blurs cost GPU and muddy the text) */
+:root.glass .fold .list{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--glass-wash);box-shadow:inset 0 0 0 1px var(--glass-edge)}
+/* inside the glass: tints instead of opaque fills, so the pane reads as one sheet */
+:root.glass .item.is-next .row{background:var(--glass-tint-next)}
+:root.glass .item.onboard .row{background:var(--glass-tint-good)}
+:root.glass .stops,:root.glass .divider{background:var(--glass-wash)}
+:root.glass .head,:root.glass .row,:root.glass .stops{border-color:var(--glass-line)}
+:root.glass .btn:not(.accent):not(.primary){background:var(--glass-wash);border-color:var(--glass-edge);box-shadow:0 0 0 1px var(--glass-line)}
+:root.glass .mbox input,:root.glass .card :is(input[type=text],input[type=date],select){background:var(--glass-wash);border-color:var(--glass-line)}
+
+/* text that sits straight on the rail yard gets a backing so a rail never runs through it */
+:root.glass .toggle{align-self:flex-start;padding:5px 12px 5px 8px;border-radius:999px;background:var(--glass-wash);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:inset 0 0 0 1px var(--glass-edge)}
+:root.glass footer{text-shadow:0 0 6px var(--sky),0 0 12px var(--sky)}
+/* cheaper on phones: GPU blur cost grows with radius */
+@media (max-width:600px){:root.glass{--glass-blur:18px}}
+
+/* fallbacks: no backdrop-filter support, or the viewer asked for less transparency / more contrast */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  :root.glass{--glass:var(--surface);--glass-sheen:transparent;--glass-wash:transparent;--glass-board:var(--board)}}
+@media (prefers-reduced-transparency:reduce){
+  :root.glass{--glass:var(--surface);--glass-sheen:transparent;--glass-wash:transparent;--glass-board:var(--board);--glass-tint-good:var(--good-bg)}
+  :root.glass :is(.list,.card,.fold,.tracker,.board){-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media (prefers-contrast:more){
+  :root.glass{--glass:var(--surface);--glass-sheen:transparent;--glass-wash:transparent;--glass-board:var(--board);--glass-line:var(--ink);--glass-tint-good:var(--good-bg)}
+  :root.glass :is(.list,.card,.fold,.tracker,.board){-webkit-backdrop-filter:none;backdrop-filter:none}
+  :root.glass .rail-bg{display:none}}
+
+/* admin: appearance choice */
+.look-seg{display:flex;gap:6px;flex-wrap:wrap}
+.look-seg .btn[aria-pressed="true"],:root.glass .look-seg .btn[aria-pressed="true"]{background:var(--board);color:var(--board-ink);border-color:var(--board)}
+</style>
+<div class="rail-bg" aria-hidden="true"><svg viewBox="0 0 800 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <path id="trk-main" d="M-60 70 C 230 80 520 290 860 520"/>
+    <path id="trk-branch" d="M-60 70 C 230 80 360 250 450 980"/>
+    <path id="trk-low" d="M-60 770 C 240 690 560 720 860 610"/>
+    <mask id="trk-rails" maskUnits="userSpaceOnUse" x="-100" y="-100" width="1000" height="1200">
+      <g fill="none" stroke="#fff" stroke-width="40"><use href="#trk-main"/><use href="#trk-branch"/><use href="#trk-low"/></g>
+      <g fill="none" stroke="#000" stroke-width="32"><use href="#trk-main"/><use href="#trk-branch"/><use href="#trk-low"/></g>
+    </mask>
+  </defs>
+  <g class="ballast"><use href="#trk-main"/><use href="#trk-branch"/><use href="#trk-low"/></g>
+  <g class="sleepers"><use href="#trk-main"/><use href="#trk-branch"/><use href="#trk-low"/></g>
+  <rect class="rails" x="-100" y="-100" width="1000" height="1200" mask="url(#trk-rails)"/>
+</svg></div>
+<script>try{if((localStorage.getItem('ktmb-look-cache')||'glass')==='glass')document.documentElement.classList.add('glass');}catch(e){document.documentElement.classList.add('glass');}</script>
+
 <div id="app"></div>
 
 <script>
@@ -649,6 +766,9 @@ function renderAdmin(){
       (LOCAL.dirty?(A.confirmReset?'<span class="confirm">Discard local changes? <button class="btn sm danger" id="l-reset-yes" type="button">Discard</button><button class="btn sm" id="l-reset-no" type="button">Keep</button></span>':'<button class="btn danger" id="l-reset" type="button">Discard local changes</button>'):'')+
       '</div></section>':'')+
     (A.msg?'<div class="msg '+(A.msg.kind==='err'?'err':A.msg.kind==='ok'?'ok':'warnlist')+'" role="status">'+esc(A.msg.text)+'</div>':'')+
+    (S.localMode?(()=>{const g=currentLook()==='glass';return '<section class="card"><h2>Appearance</h2>'+
+      '<div class="look-seg" role="group" aria-label="Page look"><button class="btn sm" type="button" id="look-glass" aria-pressed="'+g+'">Glass</button><button class="btn sm" type="button" id="look-classic" aria-pressed="'+!g+'">Classic</button></div>'+
+      '<p class="muted" style="margin:0">Sets the look for everyone who opens the timetable. Riders who turn on Reduce transparency or Increase contrast on their phone always get solid panels.</p></section>';})():'')+
     '<section class="card"><h2>Upload a new schedule</h2>'+up+'</section>'+
     '<section class="card"><h2>Revision log</h2><div class="log">'+log+'</div></section>'+
     '<section class="card" id="cmp"><h2>Compare schedules</h2>'+renderCompare()+'</section></div>';
@@ -660,6 +780,8 @@ function renderAdmin(){
   if($('f-save')) $('f-save').onclick=saveRevision;
   if($('f-cancel')) $('f-cancel').onclick=()=>{A.parsed=null;A.file=null;A.msg=null;renderAdmin();};
   if($('l-export')) $('l-export').onclick=exportLocal;
+  if($('look-glass')) $('look-glass').onclick=()=>setLook('glass');
+  if($('look-classic')) $('look-classic').onclick=()=>setLook('classic');
   if($('l-reset')) $('l-reset').onclick=()=>{A.confirmReset=true;renderAdmin();};
   if($('l-reset-yes')) $('l-reset-yes').onclick=resetLocal;
   if($('l-reset-no')) $('l-reset-no').onclick=()=>{A.confirmReset=false;renderAdmin();};
@@ -682,6 +804,7 @@ function localSave(){LOCAL.dirty=true;try{localStorage.setItem(LOCAL_KEY,JSON.st
 function localEmit(){
   S.revs=Object.entries(LOCAL.revisions).map(([id,d])=>({...d,_id:id}));S.revMap={};S.revs.forEach(r=>S.revMap[r._id]=r);
   S.live={...LOCAL.live};
+  applyLook(currentLook());
 }
 function localDb(){
   return {doc(path){const[c,id]=path.split('/');return{
@@ -690,7 +813,7 @@ function localDb(){
 }
 function exportLocal(){
   const now=new Date().toISOString();
-  const out={exportedAt:now,live:Object.fromEntries(Object.entries(LOCAL.live).filter(([k])=>k!=='updatedAt')),
+  const out={exportedAt:now,look:currentLook(),live:Object.fromEntries(Object.entries(LOCAL.live).filter(([k])=>k!=='updatedAt')),
     revisions:Object.entries(LOCAL.revisions).map(([id,d])=>({_id:id,...d})).sort((a,b)=>a.n-b.n)};
   const blob=new Blob([JSON.stringify(out,null,1)+'\n'],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='timetable.json';document.body.appendChild(a);a.click();
@@ -704,6 +827,14 @@ function resetLocal(){
   const snap=S.snapshot;
   LOCAL={base:snap.exportedAt,dirty:false,live:{...(snap.live||{})},revisions:Object.fromEntries((snap.revisions||[]).map(r=>{const{_id,...d}=r;return[_id,d];}))};
   localEmit();S.admin.msg={kind:'ok',text:'Local changes discarded. Showing the published timetable again.'};S.admin.confirmReset=false;renderAdmin();
+}
+
+/* ---------------- Look (glass / classic) ---------------- */
+const currentLook=()=>(LOCAL&&LOCAL.look)||(S.snapshot&&S.snapshot.look)||'glass';
+function applyLook(v){document.documentElement.classList.toggle('glass',v==='glass');try{localStorage.setItem('ktmb-look-cache',v);}catch(e){}}
+function setLook(v){
+  if(!LOCAL)return;LOCAL.look=v;localSave();applyLook(v);
+  S.admin.msg={kind:'ok',text:(v==='glass'?'Glass':'Classic')+' look is on in this browser. Export timetable.json and commit it to show it to everyone.'};renderAdmin();
 }
 
 /* ---------------- Boot ---------------- */
